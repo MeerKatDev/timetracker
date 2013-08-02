@@ -1,0 +1,186 @@
+<html>
+
+<head>
+	<script type="text/javascript" src="dat.gui.min.js"></script>
+	<script type="text/javascript" src="three.min.js"></script>
+	<script type="text/javascript" src="OrbitControls.js" ></script>
+	<style>*{margin:0;padding:0;}</style>
+	<title>TimeView</title>
+</head>
+<body>
+
+</body>
+<script>
+
+    var camera, scene, renderer;
+    var stepOne, stepTwo;
+	var width = window.innerWidth-100;
+	var height = window.innerHeight-100;
+	var lineMaterial = new THREE.MeshBasicMaterial( { color: 0xff0000, wireframe: false } );
+	var growthCompleted = false;
+	var increaseRate = function() { this.speed = 1.0; };
+	var increase = new increaseRate();
+	/*
+	var positions = new Array(
+		480,310, 702,564, 720,526,
+		480,310, 503,297, 797,389,
+		503,297, 480,310, 503,297, 
+		480,310, 429,126, 415,119,
+		466,300, 480,310
+	);
+	*/
+	
+	var positions = new Array(
+		-170, -85, 52, 169, 70,131,
+		-170,-85, -147,-98, 147,-6,
+		-147,-98, -170,-85, -147,-98,
+		-170,-85, -221,-269, -235,-276,
+		-184,-95, -170,-85
+	);
+	
+	var timings = new Array(-200,28,45,92,94,96,97,98,106,226,412,415,424,425);
+    
+	
+	
+	window.onload = function() {
+		var gui = new dat.GUI();
+		gui.add(increase, 'speed', 0.5, 5);
+	};
+	
+	var pCoors = [ positions[0], timings[0], positions[1] ];
+	var tCoors = [ positions[0], timings[0], positions[1] ];
+	var nCoors = [];
+	var distance = [];
+	
+	/* Reference to the growing tube */
+	var extrusion = newExtrusion( pCoors[0], pCoors[1], pCoors[2], pCoors[0] +0.01,pCoors[1] +0.01, pCoors[2] +0.01 );
+	
+	var index = 0;
+	var heightIndex = 0;
+	
+	var sphere = new THREE.SphereGeometry(2,16,16);	
+	var sphereMaterial = new THREE.MeshBasicMaterial( { color: 0x0074aa, wireframe: false } );
+	
+	var pathHeight = timings[0];
+	var rates = [0,0];
+	
+		
+	init();
+    animate();
+	
+	/** ################ FUNCTIONS ################# */
+	
+	function init() 
+	{
+        camera = new THREE.PerspectiveCamera( 45, width / height, 1, 5000 );
+		camera.position.set( 200, 0, 1100 ); 			
+        scene = new THREE.Scene();				
+		addRenderer();
+		controller = new THREE.OrbitControls( camera, renderer.domElement );		
+		var map = new THREE.Mesh(new THREE.PlaneGeometry(1300, 790), new THREE.MeshBasicMaterial({map: THREE.ImageUtils.loadTexture('yerevan.jpg')}));
+		map.rotation.x = -Math.PI/2;
+		map.position.set (0,-200,0);
+		scene.add( map );
+    }
+	
+	
+	
+	
+    function animate() {	
+        requestAnimationFrame( animate );
+		
+		if( !growthCompleted )
+		{
+			if( pathHeight < timings[heightIndex] )
+			{
+				pathHeight += 0.1*increase.speed;		
+				scene.remove( extrusion );
+				extrusion = newExtrusion( pCoors[0], pCoors[1], pCoors[2], tCoors[0] += rates[0]*increase.speed, pathHeight,tCoors[2] += rates[1]*increase.speed);
+				scene.add( extrusion );		
+			}
+			else
+			{
+				index += 2;
+				heightIndex ++;
+				pCoors = [ positions[index-2], timings[heightIndex-1], positions[index-1] ];
+				tCoors = [ positions[index-2], timings[heightIndex-1], positions[index-1] ];
+				
+				nCoors = [ positions[index], timings[heightIndex], positions[index+1] ];
+				
+				distance = calculateDistance( pCoors[0], pCoors[1], pCoors[2], nCoors[0], nCoors[1], nCoors[2] );
+				rates = [(distance[0]/(distance[1]*10)),(distance[2]/(distance[1]*10))]
+				markWithSphere( [ positions[index-2], timings[heightIndex-1], positions[index-1] ] );
+				
+				if(positions[index-4] !== undefined)
+				{
+					scene.add( newExtrusion( positions[index-4], timings[heightIndex-2], positions[index-3], pCoors[0], pCoors[1], pCoors[2] ) ); // add permanent path
+				}
+			}
+		}
+		
+		controller.update();
+        renderer.render( scene, camera );
+    }
+	
+	
+	
+	function markWithSphere( position )
+	{
+		var markingSphere;
+		markingSphere = new THREE.Mesh( sphere, sphereMaterial );
+		markingSphere.position.set( position[0], position[1], position[2] ) ;
+		scene.add( markingSphere );
+	}
+	
+		
+	function newExtrusion(pX,pY,pZ,aX,aY,aZ)
+	{
+		return new THREE.Mesh( new THREE.ExtrudeGeometry( 
+			newShape(), 
+			{ extrudePath: returnFractionedPath( pX,pY,pZ,aX,aY,aZ ) } ), lineMaterial);
+	}
+	
+	function calculateDistance( pX, pY, pZ, nX, nY, nZ )
+	{	
+		if(nX !== undefined)
+			return [ nX - pX, nY - pY, nZ - pZ ];
+		else 
+			growthCompleted = true;
+			return;
+	}
+	
+	function returnFractionedPath( pX,pY,pZ,aX,aY,aZ )
+	{
+		return new THREE.SplineCurve3( [
+			new THREE.Vector3( pX, pY, pZ ),
+			new THREE.Vector3( aX, aY, aZ )
+		]);
+	}
+	
+	function newShape()
+	{
+		var pts = [];
+		var numPoints = 64;
+		var radius = 1;
+		for ( i = 0; i < numPoints; i ++ ) {
+			var a = 2*Math.PI * i / numPoints;
+			pts.push( new THREE.Vector2 ( Math.cos( a ) * radius, Math.sin( a ) * radius ) );
+		}		
+		var shape = new THREE.Shape( pts );
+	
+		return shape;
+	}
+	
+	function addRenderer()
+	{
+		renderer = new THREE.WebGLRenderer();
+		renderer.setSize( width, height);
+		renderer.setClearColorHex(0xCCCCCC, 1);
+        document.body.appendChild( renderer.domElement );
+	}
+	
+
+
+
+</script>
+</html>
